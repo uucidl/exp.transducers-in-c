@@ -1,0 +1,347 @@
+#!/usr/bin/env bash
+
+function realpath() {
+    path="${1}"
+    echo "$(cd "$(dirname "${path}")" && pwd)"/"$(basename "${path}")"
+}
+
+## VARIABLES
+HERE="$(realpath "$(dirname "$0")")"/..
+HOSTNAME="$(hostname)"
+OS_NAME="$(uname -s)"
+OS_RELEASE="$(uname -r)"
+CPU_NAME="$(uname -m)"
+OS="${OS_NAME// /_}"
+
+while [ "$#" -gt 0 ]; do
+    case $1 in
+        -v)
+            VERBOSE=true
+            shift
+            ;;
+        --src-dir)
+            src_dir=${2:?"source directory expected"}
+            if [ ! -d "${src_dir}" ]; then
+                printf -- "source dir expected in '%s'\n" "${src_dir}"
+                exit 1
+            fi
+
+            src_dirs=("${src_dirs[@]}" ${src_dir})
+            shift
+            shift
+            ;;
+        --output-dir)
+            build_dir=${2:?"build directory expected"}
+            shift
+            shift
+            ;;
+        --help|-h)
+            printf -- "Usage: %s [-v] [--build-dir <dir>] [--output-dir <dir>]* [<build-style>\n" "${0}"
+            printf -- "\t\t-v: verbose operation\n"
+            printf -- "\t\t--src-dir: where your main cpp files are located\n"
+            printf -- "\t\t--output-dir: where to put build products\n"
+            exit 1
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+src_dirs=${src_dirs:-"${HERE}"/src/}
+
+BUILD_STYLE=${1:-debug}
+
+# CONFIGURATION
+
+shopt -s nullglob
+printf 'INFO source dirs: %s\n' "${src_dirs[@]}"
+for dir in "${src_dirs[@]}"; do
+    no_file=1
+    for src_file in "${dir}"/*.cpp; do
+        src_files=("${src_files[@]}" "${src_file}")
+        no_file=""
+    done
+
+    for src_file in "${dir}"/*.c; do
+        c_src_files=("${c_src_files[@]}" "${src_file}")
+        no_file=""
+    done
+
+    if [ -n "${no_file}" ] ; then
+        printf "ERROR no source files in %s\n" "${dir}"
+        exit 1
+    fi
+done
+src_files=("${src_files[@]}")
+c_src_files=("${c_src_files[@]}")
+shopt -u nullglob
+
+BUILD_TIMEBOX=5
+
+## TOOLS
+PATH="${HERE}"/tools:"${HERE}"/tools/"${OS_NAME}":"${HERE}"/tools/"${OS_NAME}"_"${CPU_NAME}":$PATH
+export PATH
+
+ASTYLE=astyle
+GIT=git
+
+
+BUILD_DIR=${build_dir:-"${HERE}"/builds}/${HOSTNAME}
+OBJ_DIR="${BUILD_DIR}"/obj
+
+## IMPLEMENTATION
+
+function require_dir() {
+    mkdir -p "${BUILD_DIR}"
+    mkdir -p "${OBJ_DIR}"
+}
+
+function rebuild_dir() {
+    [[ -d "${BUILD_DIR}" ]] && rm -rf "${BUILD_DIR}"
+    require_dir
+}
+
+function check_clean() {
+    git_output=$(${GIT} clean -n | grep '^Would remove')
+    if [[ -n "${git_output}" ]]; then
+        printf "WARNING some files were produced by the build outside of %s:\n%s\n" "${BUILD_DIR}" "${git_output}"
+    fi
+}
+
+function compile_default() {
+    printf "define a compilation function for your OS %s or host %s!\n" "${OS}" "${HOSTNAME}"
+    exit 1
+}
+
+function compile_gxxlike() {
+    cflags=("-isystem" "${HERE}"/include "${cflags[@]}")
+    cflags=("-Wall" "-Wextra" "-Werror" "-pedantic" "${cflags[@]}")
+    cflags=("${cflags[@]}" "-Wno-padded" "-Wno-unused-parameter")
+
+    if [[ -n "${VERBOSE}" ]]; then
+        cflags=("${cflags[@]}" "-v")
+    fi
+
+    if [[ "debug" == "${BUILD_STYLE}" ]]; then
+        cflags=("${cflags[@]}" "-g")
+    fi
+
+    if [[ "static-analysis" == "${BUILD_STYLE}" ]]; then
+        cflags=("${cflags[@]}" "--analyze")
+        ldflags=()
+        "${CC}" -std=c11 "${cflags[@]}" "${ldflags[@]}" "${c_src_files[@]}"
+        "${CXX}" -std=c++11 "${cflags[@]}" "${ldflags[@]}" "${src_files[@]}"
+        return
+    fi
+
+    for srcf in "${c_src_files[@]}"; do
+        local obj="${OBJ_DIR}/"$(basename "${srcf}").o
+        [[ ! -e $obj ]] || (printf 'ERROR %s already exists' "$obj"; exit 1)
+        "${CC}" -c -std=c11 "${cflags[@]}" "$srcf" -o "$obj"
+        if [[ $? -ne 0 ]]; then
+          printf 'ERROR compiling %s\n' "$srcf"
+          exit 1
+        fi
+    done
+
+    for srcf in "${src_files[@]}"; do
+        local obj="${OBJ_DIR}/"$(basename "${srcf}").o
+        [[ ! -e $obj ]] || (printf 'ERROR %s already exists' "$obj"; exit 1)
+        "${CXX}" -c -std=c++11 "${cflags[@]}" "$srcf" -o "$obj"
+        if [[ $? -ne 0 ]]; then
+          printf 'ERROR compiling %s\n' "$srcf"
+          exit 1
+        fi
+    done
+
+    "${CXX}" -std=c++11 "${cflags[@]}" "${ldflags[@]}" "${OBJ_DIR}"/*.o -o "${BUILD_DIR}/main"
+}
+
+function compile_clang() {
+    cflags=("${cflags[@]}" "-stdlib=libc++")
+    CXX=clang++
+    CC=clang
+    compile_gxxlike
+}
+
+function compile_Darwin() {
+    cflags=("${cflags[@]}" "-Wno-deprecated-declarations")
+
+    compile_clang
+}
+
+function reg_query() {
+    path=$1
+    value_name=$2
+    reg query "$path" //v "$value_name" 2> /dev/null | awk -F'    ' '/'"${value_name}"'/ {print $4}'
+}
+
+function posix_path() {
+    windows_path="$1"
+    echo "$(cd "$windows_path" ; pwd -P)"
+}
+
+function windows_dir() {
+    posix_dir="$1"
+    echo "$(cd "$posix_dir" ; pwd -W)" | sed -e 's,\/,\\,g'
+}
+
+function windows_path() {
+    posix_path="$1"
+    if [ -f "${posix_path}" ]; then
+        posix_dir="$(dirname "${posix_path}")"
+        basename="$(basename "${posix_path}")"
+        echo "$(windows_dir "${posix_dir}")"'\'"${basename}"
+        return
+    fi
+    echo "$(windows_dir "${posix_path}")"
+}
+
+function set_vcenv() {
+    VS_WINDIR="$1"
+    VS_ARCH="$2"
+    WBASH="$(windows_path "${BASH}")"
+    WBUILD_DIR="$(windows_path "${BUILD_DIR}")"
+
+    (cmd <<EOF
+"${WBASH}" -c set > "${WBUILD_DIR}"/vcvarsall-prev.env
+"${VS_WINDIR}/vcvarsall.bat" ${VS_ARCH} > "${WBUILD_DIR}"/vcvars.log
+"${WBASH}" -c set > "${WBUILD_DIR}"/vcvarsall-after.env
+EOF
+    ) > /dev/null
+
+    diff -u "${BUILD_DIR}"/vcvarsall-prev.env "${BUILD_DIR}"/vcvarsall-after.env | grep -e '^\+[^\+]' | cut -c 2- | grep -v -e '^\!' > "${BUILD_DIR}/vc.env"
+
+    if [ ! -s "${BUILD_DIR}/vc.env" ]; then
+        printf "ERROR failed to capture the visual studio environment\n"
+        exit 1
+    fi
+
+    . "${BUILD_DIR}"/vc.env
+}
+
+function compile_vstudio() {
+    vstudio_ver="${1:?missing vstudio version}"
+    vstudio_arch="${2:?missing architecture}"
+    VS_WINDIR=$(reg_query "HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\SxS\\VC7" "$vstudio_ver")
+    if [[ -z $VS_WINDIR ]]; then
+        printf 'ERROR cannot find visual studio version: %s\n' "$vstudio_ver"
+        exit 1
+    fi
+
+
+    set_vcenv "${VS_WINDIR}" "${vstudio_arch}"
+
+    CL_CMD=${CL_CMD:="cl.exe"}
+    LINK_CMD="link.exe"
+
+    clflags=("${clflags[@]}" "//nologo" "//EHsc" "//W4" "//WX" "//wd4996" "//wd4068" "//wd4100" "//Zc:forScope")
+
+    link_flags=("${link_flags[@]}" //nologo)
+
+    BUILD_WINDIR="$(windows_path "${BUILD_DIR}/")"
+    MAIN_EXE="$BUILD_WINDIR"\\main.exe
+    OBJ_WINDIR="$(windows_path "${OBJ_DIR}/")"
+    INCLUDE_WINDIR="$(windows_path "${HERE}/include")"
+    export LIB
+    export INCLUDE
+
+    for srcf in "${src_files[@]}"; do
+        "${CL_CMD}" "${clflags[@]}" "$srcf" //c //I"${INCLUDE_WINDIR}" //Fo"${OBJ_WINDIR}"\\
+        if [[ $? -ne 0 ]]; then
+          printf 'ERROR compiling %s\n' "$srcf"
+          exit 1
+        fi
+    done
+
+    for srcf in "${c_src_files[@]}"; do
+        "${CL_CMD}" "${clflags[@]}" "$srcf" //c //I"${INCLUDE_WINDIR}" //Fo"${OBJ_WINDIR}"\\
+        if [[ $? -ne 0 ]]; then
+          printf 'ERROR compiling %s\n' "$srcf"
+          exit 1
+        fi
+    done
+
+    "${LINK_CMD}" "${link_flags[@]}" //OUT:"${MAIN_EXE}" "${OBJ_DIR}"/*.obj
+    return
+}
+
+function compile_NT() {
+    local vstudio_arch=x86
+
+    compile_vstudio "12.0" "${vstudio_arch}"
+}
+
+# windows 7 on msys with vstudio express 2013
+function compile_MINGW32_NT-6.1() {
+    compile_NT
+}
+
+# windows 8 on msys with vstudio express 2013
+function compile_MINGW32_NT-6.2() {
+    compile_NT
+}
+
+function compile() {
+    if [[ -z "$src_files" ]]; then
+        printf "ERROR no source files? %s\n" "${src_files}"
+    fi
+
+    for f in "${src_files[@]}"; do
+        if [[ ! -e ${f} ]] ; then
+            printf "ERROR could not find source file %s in %s\n" "${f}" "${src_files}"
+            exit 1
+        fi
+    done
+
+    if [[ "function" = $(type -t "compile_${HOSTNAME}") ]]; then
+        compile_"${HOSTNAME}"
+        return
+    fi
+
+    if [[ "function" = $(type -t "compile_${OS}") ]]; then
+        compile_"${OS}"
+        return
+    fi
+
+    compile_default
+}
+
+function timed_compile() {
+    ts_start="$(date +'%s')"
+    compile
+    RC=$?
+    ts_end=$(date +'%s')
+    ts_elapsed=$((ts_end - ts_start))
+    ts_acceptable_elapsed=$((BUILD_TIMEBOX))
+    cat=INFO
+    if [[ ts_elapsed -gt ts_acceptable_elapsed ]]; then
+        cat="ERROR"
+    fi
+    printf '%s compilation took %d seconds\n' $cat $ts_elapsed
+    return $RC
+}
+
+function show_todo() {
+    grep -e 'TODO:' "${src_files[@]}" | while read match ; do
+        printf "WARNING %s\n" "$match"
+    done
+}
+
+printf "INFO building on %s (os: %s, cpu: %s, build style: %s)\n" "${HOSTNAME}" "${OS}" "${CPU_NAME}" "${BUILD_STYLE}"
+
+if [[ -n $VERBOSE ]]; then
+    set -x
+fi
+
+rebuild_dir && timed_compile && show_todo && check_clean
+
+if [[ $? -ne 0 ]]; then
+    printf "ERROR error\n"
+    exit 1
+fi
+
+printf "INFO success\n"
+printf "INFO results:\n"
+find "${BUILD_DIR}" -type f
