@@ -284,7 +284,7 @@ function compile_MINGW32_NT-6.2() {
 }
 
 function compile() {
-    if [[ -z "$src_files" ]]; then
+    if [[ -z "$src_files$c_src_files" ]]; then
         printf "ERROR no source files? %s\n" "${src_files}"
     fi
 
@@ -324,7 +324,7 @@ function timed_compile() {
 }
 
 function show_todo() {
-    grep -e 'TODO:' "${src_files[@]}" | while read match ; do
+    grep -e 'TODO:' "${c_src_files[@]}" "${src_files[@]}" | while read match ; do
         printf "WARNING %s\n" "$match"
     done
 }
