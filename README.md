@@ -1,12 +1,16 @@
-<<TITLE>>
-=========
+Exploration: tranducers in C
+============================
 
-<<DESCRIPTION>>
+Implementing tranducers in C.
 
-Status ![Continuous Build Status](<<CI-LINK>>)
+Transducers have been introduced by Rich Hickey in his Strange Loop talk in 2014.
+
+see https://www.youtube.com/watch?v=6mTbuzafcII
+
+Status
 ------
 
-<<STATUS>>
+WIP
 
 see the [ChangeLog](./ChangeLog) file for changes.
 
@@ -15,15 +19,10 @@ Licensing
 
 MIT. Look for the [LICENSE](./LICENSE) file.
 
-Installation
-------------
-
-<<INSTALLATION>>
-
 Using
 -----
 
-<<USING>>
+[test.sh](./test.sh)
 
 Contributing
 ------------
