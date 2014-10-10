@@ -309,17 +309,28 @@ int main (int argc, char** argv)
         {
                 float values[] = { -1.0f, 1.0f, -2.0f, 2.0f, 3.0f, -3.0f, 4.0f, -4.0f };
                 struct ValueStreamRange valuesRange;
-                floatArrayVSR(&valuesRange, values, sizeof values / sizeof values[0]);
-
                 struct Transducer* one = filteringTransducer(positiveFloatsOnly, &heapAllocator);
+                printf("input: ");
+                {
+                        floatArrayVSR(&valuesRange, values, sizeof values / sizeof values[0]);
+                        reduce(&valuesRange, printReducer(&heapAllocator), &heapAllocator);
+                }
+
+                printf("\nprint-out: ");
                 struct Value result;
                 {
                         struct Reducer* reducer = transducer_apply(one, printReducer(&heapAllocator), &heapAllocator);
+
+                        floatArrayVSR(&valuesRange, values, sizeof values / sizeof values[0]);
                         result = reduce(&valuesRange, reducer, &heapAllocator);
                         printf("\n");
                 }
 
-                printf("result is: %f ; expected: 10.0\n", *((float*) result.address));
+                float resultFloat = -1.0000;
+                if (result.type_tag == TTAG_FLOAT) {
+                        resultFloat = *((float*) result.address);
+                }
+                printf("result is: %f ; expected: 10.0\n", resultFloat);
 
         }
 
