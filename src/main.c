@@ -5,9 +5,11 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 enum TypeTags
 {
+        TTAG_NULL,
         TTAG_FLOAT,
 };
 
@@ -23,10 +25,15 @@ struct Reducer;
 // reducer closure
 struct Reducer
 {
-        struct Value (*zero)(struct Reducer *reducer);
-        struct Value (*apply)(struct Reducer *reducer, struct Value input, struct Value current);
+        struct Value (*zero)(struct Reducer const *reducer);
+        struct Value (*apply)(struct Reducer const *reducer, struct Value input, struct Value current);
         struct Allocator* allocator;
 };
+
+static
+struct Value reducer_apply(struct Reducer const* reducer, struct Value input, struct Value current) {
+        return reducer->apply(reducer, input, current);
+}
 
 struct ValueStreamRange
 {
@@ -105,7 +112,7 @@ struct Value accumulateFloat(
 }
 
 static
-struct Value accumulateFloatZero(struct Reducer* reducer)
+struct Value accumulateFloatZero(struct Reducer const* reducer)
 {
         static float zero = 0.0f;
         return (struct Value) {
@@ -116,7 +123,7 @@ struct Value accumulateFloatZero(struct Reducer* reducer)
 }
 
 static
-struct Value accumulateFloatApply(struct Reducer* reducer, struct Value const input, struct Value const current)
+struct Value accumulateFloatApply(struct Reducer const* reducer, struct Value const input, struct Value const current)
 {
         return accumulateFloat(input, current, reducer->allocator);
 }
@@ -148,10 +155,110 @@ struct Value reduce(struct ValueStreamRange* range, struct Reducer* reducer, str
         struct Value element;
         struct Value result = reducer->zero(reducer);
         while ((element = nextValueVSR(range), range->error == S_NoError)) {
-                result = reducer->apply(reducer, element, result);
+                result = reducer_apply(reducer, element, result);
         }
         return result;
 }
+
+/* transducers */
+
+struct Transducer
+{
+        struct Reducer* (*apply)(struct Transducer *transducer, struct Reducer const* step, struct Allocator* allocator);
+};
+
+/* return new reducer from input reducer */
+static struct Reducer* transducer_apply(struct Transducer* transducer, struct Reducer const *step, struct Allocator *allocator) {
+        return transducer->apply(transducer, step, allocator);
+}
+
+struct FilteringTransducer {
+        struct Transducer super;
+        bool (*predicate)(struct Value value);
+};
+
+struct FilteringReducer {
+        struct Reducer super;
+        struct Reducer const* step;
+        bool (*predicate)(struct Value value);
+};
+
+static
+struct Value filteringReducerZero(struct Reducer const* reducer)
+{
+        return (struct Value) {0, 0, 0};
+}
+
+static
+struct Value filteringReducerApply(struct Reducer const* reducer, struct Value const input, struct Value const current) {
+        struct FilteringReducer* self = (struct FilteringReducer*) reducer;
+        if (self->predicate(input)) {
+                return reducer_apply(self->step, input, current);
+        }
+
+        return current;
+}
+
+static struct Reducer* filteringTransducerApply(struct Transducer *transducer, struct Reducer const* step, struct Allocator* allocator) {
+        struct FilteringTransducer* self = (struct FilteringTransducer*) transducer;
+        struct FilteringReducer* result = allocator_alloc(allocator, sizeof *result);
+
+        result->step = step;
+        result->predicate = self->predicate;
+        result->super = (struct Reducer) {
+                .zero = filteringReducerZero,
+                .apply = filteringReducerApply,
+                .allocator = allocator
+        };
+
+        return &result->super;
+}
+
+static struct Transducer* filteringTransducer(bool (*predicate)(struct Value value), struct Allocator* allocator) {
+        struct FilteringTransducer* transducer = allocator_alloc(allocator, sizeof *transducer);
+
+        transducer->predicate = predicate;
+        transducer->super = (struct Transducer) {
+                .apply = filteringTransducerApply,
+        };
+
+        return &transducer->super;
+}
+
+static
+struct Value printReducerZero(struct Reducer const* reducer)
+{
+        return (struct Value) {0, 0, 0};
+}
+
+static struct Value printReducerApply(struct Reducer const* reducer, struct Value input, struct Value current) {
+        if (current.type_tag != 0) {
+                printf(", ");
+        }
+
+        if (input.type_tag == TTAG_FLOAT) {
+                printf("%f", *((float*)input.address));
+        } else {
+                printf("?");
+        }
+
+        return input;
+}
+
+static struct Reducer* printReducer(struct Allocator* allocator) {
+        struct Reducer* result =
+                allocator_alloc(allocator, sizeof *result);
+
+        *result = (struct Reducer) {
+                .zero = printReducerZero,
+                .apply = printReducerApply,
+                .allocator = allocator,
+        };
+
+        return result;
+}
+
+/* main program */
 
 static
 void* stdlib_alloc(struct Allocator * const allocator, size_t size)
@@ -165,6 +272,10 @@ void stdlib_free(struct Allocator * const allocator, void* ptr)
         free(ptr);
 }
 
+static bool positiveFloatsOnly(struct Value value) {
+        return value.type_tag == TTAG_FLOAT && *((float*) value.address) > 0.0f;
+}
+
 int main (int argc, char** argv)
 {
         struct Allocator heapAllocator = {
@@ -176,7 +287,7 @@ int main (int argc, char** argv)
         {
                 struct Value result = accumulateFloat(floatValue(1.0f, &heapAllocator), floatValue(3.0f, &heapAllocator), &heapAllocator);
 
-                printf("result is: %f\n", *((float*)result.address));
+                printf("result is: %f; expected: 4.0\n", *((float*)result.address));
         }
 
         printf("2. process array as stream\n");
@@ -191,7 +302,25 @@ int main (int argc, char** argv)
                 floatArrayVSR(&valuesRange, values, sizeof values / sizeof values[0]);
 
                 struct Value result = reduce(&valuesRange, &accumulator, &heapAllocator);
-                printf("result is: %f\n", *((float*) result.address));
+                printf("result is: %f; expected: 10.0\n", *((float*) result.address));
+        }
+
+        printf("3. filter out all negative floats and accumulate\n");
+        {
+                float values[] = { -1.0f, 1.0f, -2.0f, 2.0f, 3.0f, -3.0f, 4.0f, -4.0f };
+                struct ValueStreamRange valuesRange;
+                floatArrayVSR(&valuesRange, values, sizeof values / sizeof values[0]);
+
+                struct Transducer* one = filteringTransducer(positiveFloatsOnly, &heapAllocator);
+                struct Value result;
+                {
+                        struct Reducer* reducer = transducer_apply(one, printReducer(&heapAllocator), &heapAllocator);
+                        result = reduce(&valuesRange, reducer, &heapAllocator);
+                        printf("\n");
+                }
+
+                printf("result is: %f ; expected: 10.0\n", *((float*) result.address));
+
         }
 
         return 0;
