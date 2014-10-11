@@ -281,9 +281,7 @@ struct ComposingTransducer
 struct ComposingReducer
 {
         struct Reducer super;
-        struct Reducer** reducers;
-        struct Value* reducersResult;
-        size_t reducersCount;
+        struct Reducer const* topReducer;
 };
 
 static struct Value composingReducerZero(struct Reducer const* reducer, struct Allocator* allocator) {
@@ -293,7 +291,7 @@ static struct Value composingReducerZero(struct Reducer const* reducer, struct A
 static struct Value composingReducerApply(struct Reducer const* reducer, struct Value input, struct Value current, struct Allocator* allocator) {
         struct ComposingReducer* self = (struct ComposingReducer*) reducer;
 
-        return reducer_apply(self->reducers[0],
+        return reducer_apply(self->topReducer,
                              input,
                              current,
                              allocator);
@@ -303,18 +301,13 @@ static struct Reducer* composingTransducerApply(struct Transducer* transducer, s
         struct ComposingTransducer* self = (struct ComposingTransducer*) transducer;
         struct ComposingReducer* result = allocator_alloc(allocator, sizeof *result);
 
-        result->reducersCount = self->transducersCount;
-        result->reducers = allocator_alloc(allocator, result->reducersCount * sizeof result->reducers[0]);
-        result->reducersResult = allocator_alloc(allocator, result->reducersCount * sizeof result->reducersResult[0]);
-
         struct Reducer const * x = step;
         for (size_t i = 0; i < self->transducersCount; i++) {
                 size_t idx = self->transducersCount - 1 - i;
-                result->reducers[idx] = transducer_apply(self->transducers[idx], x, allocator);
-                result->reducersResult[idx] = reducer_zero(result->reducers[idx], allocator);
-                x = result->reducers[idx];
+                x = transducer_apply(self->transducers[idx], x, allocator);
         }
 
+        result->topReducer = x;
         result->super = (struct Reducer) {
                 composingReducerZero,
                 composingReducerApply,
