@@ -18,7 +18,19 @@ struct Value
         int type_tag;
         size_t element_size;
         void const* address;
+        struct Allocator* allocator;
 };
+
+static struct Value nullValue() {
+        return (struct Value) { 0, 0, 0, 0 };
+}
+
+static void freeValue(struct Value* value)
+{
+        allocator_free(value->allocator, (void*) value->address);
+        value->address = NULL;
+        value->allocator = NULL;
+}
 
 struct Reducer;
 
@@ -43,7 +55,7 @@ struct Value reducer_apply(struct Reducer const* reducer, struct Value input, st
 
 static
 struct Value idReducerZero(struct Reducer const* reducer) {
-        return (struct Value) { 0, 0, 0 };
+        return nullValue();
 }
 
 static
@@ -215,7 +227,7 @@ struct FilteringReducer {
 static
 struct Value filteringReducerZero(struct Reducer const* reducer)
 {
-        return (struct Value) {0, 0, 0};
+        return nullValue();
 }
 
 static
@@ -270,7 +282,7 @@ struct ComposingReducer
 };
 
 static struct Value composingReducerZero(struct Reducer const* reducer) {
-        return (struct Value) {0, 0, 0};
+        return nullValue();
 }
 
 static struct Value composingReducerApply(struct Reducer const* reducer, struct Value input, struct Value current) {
@@ -382,7 +394,7 @@ struct Transducer* mappingTransducer(struct Reducer* reducer, struct Allocator* 
 static
 struct Value printReducerZero(struct Reducer const* reducer)
 {
-        return (struct Value) {0, 0, 0};
+        return nullValue();
 }
 
 static struct Value printReducerApply(struct Reducer const* reducer, struct Value input, struct Value current) {
@@ -416,7 +428,7 @@ static struct Value transduceFloatArray(float* values, size_t valuesCount, struc
         struct Reducer* reducer = transducer_apply(transducer, idReducer(allocator), allocator);
         struct Value result = reducer_zero(reducer);
         for (size_t i = 0; i < valuesCount; i++) {
-                struct Value value = { TTAG_FLOAT, sizeof values[i], &values[i] };
+                struct Value value = { TTAG_FLOAT, sizeof values[i], &values[i], 0 };
                 result = reducer_apply(reducer, value, result);
         }
 
@@ -450,9 +462,13 @@ int main (int argc, char** argv)
 
         printf("1. individual test\n");
         {
-                struct Value result = accumulateFloat(floatValue(1.0f, &heapAllocator), floatValue(3.0f, &heapAllocator), &heapAllocator);
+                struct Value a = floatValue(1.0f, &heapAllocator);
+                struct Value b = floatValue(3.0f, &heapAllocator);
+                struct Value result = accumulateFloat(a, b, &heapAllocator);
 
                 printf("result is: %f; expected: 4.0\n", *((float*)result.address));
+
+                freeValue(&a), freeValue(&b), freeValue(&result);
         }
 
         printf("2. process array as stream\n");
