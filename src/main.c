@@ -3,6 +3,8 @@
 #include "stream_types.h"
 #include "transducer_types.h"
 #include "transducers.h"
+#include "value_stream_types.h"
+#include "value_streams.h"
 #include "values.h"
 
 #include <assert.h>
@@ -35,54 +37,6 @@ static struct Value transduceFloatArray(float* values, size_t valuesCount, struc
 }
 
 /* 2. streams of values */
-
-struct ValueStreamRange
-{
-        int type_tag;
-        size_t element_size;
-        uint8_t const *start;
-        uint8_t const *end;
-        uint8_t const *cursor;
-        enum StreamErrorCode error;
-        enum StreamErrorCode (*next)(struct ValueStreamRange*);
-};
-
-static enum StreamErrorCode zerosVSRNext(struct ValueStreamRange* range)
-{
-        static uint8_t const zeros[256] = {0};
-
-        range->type_tag = 0;
-        range->element_size = 1;
-        range->start = zeros;
-        range->cursor = zeros;
-        range->end = zeros + sizeof(zeros);
-
-        return range->error;
-}
-
-static enum StreamErrorCode failVSR(struct ValueStreamRange* range, enum StreamErrorCode error)
-{
-        range->error = error;
-        range->next = zerosVSRNext;
-        return range->next(range);
-}
-
-static enum StreamErrorCode floatArrayNext(struct ValueStreamRange* range)
-{
-        return failVSR(range, S_ReadPastEnd);
-}
-
-static
-void floatArrayVSR(struct ValueStreamRange* range, float const* values, size_t count)
-{
-        range->type_tag = TTAG_FLOAT;
-        range->element_size = sizeof(float);
-        range->start = (uint8_t*) values;
-        range->cursor = (uint8_t*) values;
-        range->end = (uint8_t*) (values + count);
-        range->error = S_NoError;
-        range->next = floatArrayNext;
-}
 
 static
 struct Value nextValueVSR(struct ValueStreamRange* range)
