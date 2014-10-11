@@ -189,6 +189,47 @@ static bool positiveFloatsOnly(struct Value value, void* data) {
         return value.type_tag == TTAG_FLOAT && *((float*) value.address) > 0.0f;
 }
 
+struct Value indexingReducerZero(struct Reducer const *reducer, struct Allocator *allocator) {
+        return nullValue();
+}
+
+struct Value indexingReducerApply(struct Reducer const *reducer, struct Value input,
+                           struct Value current, struct Allocator *allocator) {
+        size_t index;
+        if (current.type_tag == 0) {
+                index = 0;
+        } else {
+                index = 1 + justIndex(current);
+        }
+
+        return indexValue(input, index, allocator);
+}
+
+struct Reducer* indexingReducer(struct Allocator* allocator) {
+        struct Reducer* result = allocator_alloc(allocator, sizeof *result);
+
+        *result = (struct Reducer) {
+                indexingReducerZero,
+                indexingReducerApply,
+        };
+
+        return result;
+}
+
+struct Range
+{
+        size_t start;
+        size_t end;
+};
+
+static bool isIndexInRange(struct Value value, void* userData) {
+        struct Range* range = userData;
+
+        size_t index = justIndex(value);
+
+        return index >= range->start && index < range->end;
+}
+
 /* main program */
 
 static
@@ -272,6 +313,35 @@ int main (int argc, char** argv)
                 {
                         struct Value result = transduceFloatArray(values, sizeof values / sizeof values[0], process, &heapAllocator);
                         printf("result is: %f ; expected: 10.0\n", justFloat(result));
+                }
+        }
+
+        printf ("4. demonstrate that a processing can stop earlier\n");
+        {
+                struct Range range = {
+                        .start = 0,
+                        .end = 4,
+                };
+                struct Transducer* processSteps[] = {
+                        filteringTransducer(positiveFloatsOnly, NULL, &heapAllocator),
+                        mappingTransducer(indexingReducer(&heapAllocator), &heapAllocator),
+                        filteringTransducer(isIndexInRange, &range, &heapAllocator),
+                        mappingTransducer(printReducer(&heapAllocator), &heapAllocator),
+//                        fnMappingTransducer(unwrapIndexedValue, NULL, &heapAllocator),
+//                        mappingTransducer(&accumulator, &heapAllocator),
+                };
+                struct Transducer* process = composingTransducer(
+                        processSteps,
+                        sizeof processSteps / sizeof processSteps[0],
+                        &heapAllocator);
+
+                float values[] = { -3.0, -5.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 };
+                {
+                        struct Value result = transduceFloatArray(values, sizeof values / sizeof values[0], process, &heapAllocator);
+                        printf("\n");
+                        if (result.type_tag == TTAG_FLOAT) {
+                                printf("result is: %f ; expected 10.0\n", justFloat(result));
+                        }
                 }
         }
 
