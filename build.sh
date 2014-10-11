@@ -2,4 +2,4 @@
 HERE="$(dirname ${0})"
 BUILD="${HERE}/builds"
 [ -d "${BUILD}" ] || mkdir -p "${BUILD}"
-"${HERE}"/scripts/build
+"${HERE}"/scripts/build "$@"
