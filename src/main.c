@@ -10,6 +10,32 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+/* 1. extensions to values & transducers */
+
+static struct Value floatValue(float const f, struct Allocator * const allocator)
+{
+        float* result = allocator_alloc(allocator, sizeof *result);
+        *result = f;
+        return (struct Value) {
+                .type_tag = TTAG_FLOAT,
+                .element_size = sizeof *result,
+                .address = result
+        };
+}
+
+static struct Value transduceFloatArray(float* values, size_t valuesCount, struct Transducer* transducer, struct Allocator* allocator) {
+        struct Reducer* reducer = transducer_apply(transducer, idReducer(allocator), allocator);
+        struct Value result = reducer_zero(reducer, allocator);
+        for (size_t i = 0; i < valuesCount; i++) {
+                struct Value value = { TTAG_FLOAT, sizeof values[i], &values[i], 0 };
+                result = reducer_apply(reducer, value, result, allocator);
+        }
+
+        return result;
+}
+
+/* 2. streams of values */
+
 struct ValueStreamRange
 {
         int type_tag;
@@ -58,18 +84,40 @@ void floatArrayVSR(struct ValueStreamRange* range, float const* values, size_t c
         range->next = floatArrayNext;
 }
 
-static struct Value floatValue(float const f, struct Allocator * const allocator)
+static
+struct Value nextValueVSR(struct ValueStreamRange* range)
 {
-        float* result = allocator_alloc(allocator, sizeof *result);
-        *result = f;
-        return (struct Value) {
-                .type_tag = TTAG_FLOAT,
-                .element_size = sizeof *result,
-                .address = result
-        };
+        static struct Value zero;
+
+        while (range->error == S_NoError) {
+                if (range->cursor < range->end) {
+                        void const* valueAddress = range->cursor;
+                        range->cursor += range->element_size;
+                        return (struct Value) {
+                                .type_tag = range->type_tag,
+                                        .element_size = range->element_size,
+                                        .address = valueAddress,
+                                        };
+                }
+                range->next(range);
+        }
+
+        return zero;
 }
 
-/* reducer example */
+static
+struct Value reduceStream(struct ValueStreamRange* range, struct Reducer* reducer, struct Allocator * allocator)
+{
+        struct Value element;
+        struct Value result = reducer_zero(reducer, allocator);
+        while ((element = nextValueVSR(range), range->error == S_NoError)) {
+                result = reducer_apply(reducer, element, result, allocator);
+        }
+        return result;
+}
+
+/* 3. reducers */
+
 static
 struct Value accumulateFloat(
         struct Value const input,
@@ -107,38 +155,6 @@ struct Value accumulateFloatApply(struct Reducer const* reducer,
 }
 
 static
-struct Value nextValueVSR(struct ValueStreamRange* range)
-{
-        static struct Value zero;
-
-        while (range->error == S_NoError) {
-                if (range->cursor < range->end) {
-                        void const* valueAddress = range->cursor;
-                        range->cursor += range->element_size;
-                        return (struct Value) {
-                                .type_tag = range->type_tag,
-                                        .element_size = range->element_size,
-                                        .address = valueAddress,
-                                        };
-                }
-                range->next(range);
-        }
-
-        return zero;
-}
-
-static
-struct Value reduceStream(struct ValueStreamRange* range, struct Reducer* reducer, struct Allocator * allocator)
-{
-        struct Value element;
-        struct Value result = reducer_zero(reducer, allocator);
-        while ((element = nextValueVSR(range), range->error == S_NoError)) {
-                result = reducer_apply(reducer, element, result, allocator);
-        }
-        return result;
-}
-
-static
 struct Value printReducerZero(struct Reducer const* reducer, struct Allocator* allocator)
 {
         return nullValue();
@@ -170,15 +186,8 @@ static struct Reducer* printReducer(struct Allocator* allocator) {
         return result;
 }
 
-static struct Value transduceFloatArray(float* values, size_t valuesCount, struct Transducer* transducer, struct Allocator* allocator) {
-        struct Reducer* reducer = transducer_apply(transducer, idReducer(allocator), allocator);
-        struct Value result = reducer_zero(reducer, allocator);
-        for (size_t i = 0; i < valuesCount; i++) {
-                struct Value value = { TTAG_FLOAT, sizeof values[i], &values[i], 0 };
-                result = reducer_apply(reducer, value, result, allocator);
-        }
-
-        return result;
+static bool positiveFloatsOnly(struct Value value) {
+        return value.type_tag == TTAG_FLOAT && *((float*) value.address) > 0.0f;
 }
 
 /* main program */
@@ -193,10 +202,6 @@ static
 void stdlib_free(struct Allocator * const allocator, void* ptr)
 {
         free(ptr);
-}
-
-static bool positiveFloatsOnly(struct Value value) {
-        return value.type_tag == TTAG_FLOAT && *((float*) value.address) > 0.0f;
 }
 
 int main (int argc, char** argv)
