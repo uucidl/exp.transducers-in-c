@@ -37,29 +37,33 @@ struct Reducer;
 // reducer closure
 struct Reducer
 {
-        struct Value (*zero)(struct Reducer const *reducer);
-        struct Value (*apply)(struct Reducer const *reducer, struct Value input, struct Value current);
-        struct Allocator* allocator;
+        struct Value (*zero)(struct Reducer const *reducer,
+                             struct Allocator* allocator);
+
+        struct Value (*apply)(struct Reducer const *reducer,
+                              struct Value input,
+                              struct Value current,
+                              struct Allocator* allocator);
 };
 
 static
-struct Value reducer_zero(struct Reducer const* reducer)
+struct Value reducer_zero(struct Reducer const* reducer, struct Allocator* allocator)
 {
-        return reducer->zero(reducer);
+        return reducer->zero(reducer, allocator);
 }
 
 static
-struct Value reducer_apply(struct Reducer const* reducer, struct Value input, struct Value current) {
-        return reducer->apply(reducer, input, current);
+struct Value reducer_apply(struct Reducer const* reducer, struct Value input, struct Value current, struct Allocator* allocator) {
+        return reducer->apply(reducer, input, current, allocator);
 }
 
 static
-struct Value idReducerZero(struct Reducer const* reducer) {
+struct Value idReducerZero(struct Reducer const* reducer, struct Allocator* allocator) {
         return nullValue();
 }
 
 static
-struct Value idReducerApply(struct Reducer const* reducer, struct Value input, struct Value current) {
+struct Value idReducerApply(struct Reducer const* reducer, struct Value input, struct Value current, struct Allocator* allocator) {
         return input;
 }
 
@@ -70,7 +74,6 @@ struct Reducer* idReducer(struct Allocator* allocator) {
         *result = (struct Reducer) {
                 idReducerZero,
                 idReducerApply,
-                allocator,
         };
 
         return result;
@@ -153,7 +156,7 @@ struct Value accumulateFloat(
 }
 
 static
-struct Value accumulateFloatZero(struct Reducer const* reducer)
+struct Value accumulateFloatZero(struct Reducer const* reducer, struct Allocator* allocator)
 {
         static float zero = 0.0f;
         return (struct Value) {
@@ -164,9 +167,12 @@ struct Value accumulateFloatZero(struct Reducer const* reducer)
 }
 
 static
-struct Value accumulateFloatApply(struct Reducer const* reducer, struct Value const input, struct Value const current)
+struct Value accumulateFloatApply(struct Reducer const* reducer,
+                                  struct Value const input,
+                                  struct Value const current,
+                                  struct Allocator* allocator)
 {
-        return accumulateFloat(input, current, reducer->allocator);
+        return accumulateFloat(input, current, allocator);
 }
 
 static
@@ -194,9 +200,9 @@ static
 struct Value reduceStream(struct ValueStreamRange* range, struct Reducer* reducer, struct Allocator * allocator)
 {
         struct Value element;
-        struct Value result = reducer_zero(reducer);
+        struct Value result = reducer_zero(reducer, allocator);
         while ((element = nextValueVSR(range), range->error == S_NoError)) {
-                result = reducer_apply(reducer, element, result);
+                result = reducer_apply(reducer, element, result, allocator);
         }
         return result;
 }
@@ -225,16 +231,16 @@ struct FilteringReducer {
 };
 
 static
-struct Value filteringReducerZero(struct Reducer const* reducer)
+struct Value filteringReducerZero(struct Reducer const* reducer, struct Allocator* allocator)
 {
         return nullValue();
 }
 
 static
-struct Value filteringReducerApply(struct Reducer const* reducer, struct Value const input, struct Value const current) {
+struct Value filteringReducerApply(struct Reducer const* reducer, struct Value const input, struct Value const current, struct Allocator* allocator) {
         struct FilteringReducer* self = (struct FilteringReducer*) reducer;
         if (self->predicate(input)) {
-                return reducer_apply(self->step, input, current);
+                return reducer_apply(self->step, input, current, allocator);
         }
 
         return current;
@@ -249,7 +255,6 @@ static struct Reducer* filteringTransducerApply(struct Transducer *transducer, s
         result->super = (struct Reducer) {
                 .zero = filteringReducerZero,
                 .apply = filteringReducerApply,
-                .allocator = allocator
         };
 
         return &result->super;
@@ -281,15 +286,17 @@ struct ComposingReducer
         size_t reducersCount;
 };
 
-static struct Value composingReducerZero(struct Reducer const* reducer) {
+static struct Value composingReducerZero(struct Reducer const* reducer, struct Allocator* allocator) {
         return nullValue();
 }
 
-static struct Value composingReducerApply(struct Reducer const* reducer, struct Value input, struct Value current) {
+static struct Value composingReducerApply(struct Reducer const* reducer, struct Value input, struct Value current, struct Allocator* allocator) {
         struct ComposingReducer* self = (struct ComposingReducer*) reducer;
 
         return reducer_apply(self->reducers[0],
-                             input, current);
+                             input,
+                             current,
+                             allocator);
 }
 
 static struct Reducer* composingTransducerApply(struct Transducer* transducer, struct Reducer const* step, struct Allocator* allocator) {
@@ -304,14 +311,13 @@ static struct Reducer* composingTransducerApply(struct Transducer* transducer, s
         for (size_t i = 0; i < self->transducersCount; i++) {
                 size_t idx = self->transducersCount - 1 - i;
                 result->reducers[idx] = transducer_apply(self->transducers[idx], x, allocator);
-                result->reducersResult[idx] = reducer_zero(result->reducers[idx]);
+                result->reducersResult[idx] = reducer_zero(result->reducers[idx], allocator);
                 x = result->reducers[idx];
         }
 
         result->super = (struct Reducer) {
                 composingReducerZero,
                 composingReducerApply,
-                allocator,
         };
 
         return &result->super;
@@ -345,19 +351,19 @@ struct MappingReducer
 };
 
 static
-struct Value mappingReducerZero(struct Reducer const* reducer)
+struct Value mappingReducerZero(struct Reducer const* reducer, struct Allocator* allocator)
 {
         struct MappingReducer* self = (struct MappingReducer*) reducer;
-        return reducer_zero(self->step);
+        return reducer_zero(self->step, allocator);
 }
 
 static
-struct Value mappingReducerApply(struct Reducer const* reducer, struct Value input, struct Value current) {
+struct Value mappingReducerApply(struct Reducer const* reducer, struct Value input, struct Value current, struct Allocator* allocator) {
         struct MappingReducer* self = (struct MappingReducer*) reducer;
 
-        self->reducerResult = reducer_apply(self->reducer, input, self->reducerResult);
+        self->reducerResult = reducer_apply(self->reducer, input, self->reducerResult, allocator);
 
-        return reducer_apply(self->step, self->reducerResult, current);
+        return reducer_apply(self->step, self->reducerResult, current, allocator);
 }
 
 static
@@ -366,12 +372,11 @@ struct Reducer* mappingTransducerApply(struct Transducer* transducer, struct Red
         struct MappingReducer* result = allocator_alloc(allocator, sizeof *result);
 
         result->reducer = self->reducer;
-        result->reducerResult = reducer_zero(result->reducer);
+        result->reducerResult = reducer_zero(result->reducer, allocator);
         result->step = step;
         result->super = (struct Reducer) {
                 mappingReducerZero,
                 mappingReducerApply,
-                allocator,
         };
 
         return &result->super;
@@ -392,12 +397,12 @@ struct Transducer* mappingTransducer(struct Reducer* reducer, struct Allocator* 
 }
 
 static
-struct Value printReducerZero(struct Reducer const* reducer)
+struct Value printReducerZero(struct Reducer const* reducer, struct Allocator* allocator)
 {
         return nullValue();
 }
 
-static struct Value printReducerApply(struct Reducer const* reducer, struct Value input, struct Value current) {
+static struct Value printReducerApply(struct Reducer const* reducer, struct Value input, struct Value current, struct Allocator* allocator) {
         if (current.type_tag != 0) {
                 printf(", ");
         }
@@ -418,7 +423,6 @@ static struct Reducer* printReducer(struct Allocator* allocator) {
         *result = (struct Reducer) {
                 .zero = printReducerZero,
                 .apply = printReducerApply,
-                .allocator = allocator,
         };
 
         return result;
@@ -426,10 +430,10 @@ static struct Reducer* printReducer(struct Allocator* allocator) {
 
 static struct Value transduceFloatArray(float* values, size_t valuesCount, struct Transducer* transducer, struct Allocator* allocator) {
         struct Reducer* reducer = transducer_apply(transducer, idReducer(allocator), allocator);
-        struct Value result = reducer_zero(reducer);
+        struct Value result = reducer_zero(reducer, allocator);
         for (size_t i = 0; i < valuesCount; i++) {
                 struct Value value = { TTAG_FLOAT, sizeof values[i], &values[i], 0 };
-                result = reducer_apply(reducer, value, result);
+                result = reducer_apply(reducer, value, result, allocator);
         }
 
         return result;
@@ -478,7 +482,6 @@ int main (int argc, char** argv)
                 struct Reducer accumulator = {
                         .zero = accumulateFloatZero,
                         .apply = accumulateFloatApply,
-                        .allocator = &heapAllocator,
                 };
                 floatArrayVSR(&valuesRange, values, sizeof values / sizeof values[0]);
 
@@ -493,7 +496,6 @@ int main (int argc, char** argv)
                 struct Reducer accumulator = {
                         .zero = accumulateFloatZero,
                         .apply = accumulateFloatApply,
-                        .allocator = &heapAllocator,
                 };
                 struct Transducer* processSteps[] = {
                         filteringTransducer(positiveFloatsOnly, &heapAllocator),
