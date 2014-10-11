@@ -30,6 +30,36 @@ static float justFloat(struct Value value) {
         return *((float*) value.address);
 }
 
+#define TTAG_IndexedValue (0xd4e1cf8d)
+
+struct IndexedValue
+{
+        struct Value value;
+        size_t index;
+};
+
+static size_t justIndex(struct Value value) {
+        assert (value.type_tag == TTAG_IndexedValue);
+        return ((struct IndexedValue*) value.address)->index;
+}
+
+static struct Value indexValue(struct Value value, size_t index, struct Allocator* allocator) {
+        struct IndexedValue* result = allocator_alloc(allocator, sizeof *result);
+
+        *result = (struct IndexedValue) {
+                .value = value,
+                .index = index,
+        };
+
+        return (struct Value) { TTAG_IndexedValue, sizeof *result, result, allocator };
+}
+
+static struct Value justValueOfIndexedValue(struct Value indexedValue) {
+        assert (indexedValue.type_tag == TTAG_IndexedValue);
+        return ((struct IndexedValue*) indexedValue.address)->value;
+}
+
+
 static struct Value transduceFloatArray(float* values, size_t valuesCount, struct Transducer* transducer, struct Allocator* allocator) {
         struct Reducer* reducer = transducer_apply(transducer, idReducer(allocator), allocator);
         struct Value result = reducer_zero(reducer, allocator);
@@ -119,16 +149,25 @@ struct Value printReducerZero(struct Reducer const* reducer, struct Allocator* a
         return nullValue();
 }
 
+static void printValue(struct Value value) {
+        if (value.type_tag == TTAG_FLOAT) {
+                printf("%f", *((float*)value.address));
+        } else if (value.type_tag == TTAG_IndexedValue) {
+                printf("(%zu ", justIndex(value));
+                printValue(justValueOfIndexedValue(value));
+                printf(")");
+
+        } else {
+                printf("?");
+        }
+}
+
 static struct Value printReducerApply(struct Reducer const* reducer, struct Value input, struct Value current, struct Allocator* allocator) {
         if (current.type_tag != 0) {
                 printf(", ");
         }
 
-        if (input.type_tag == TTAG_FLOAT) {
-                printf("%f", *((float*)input.address));
-        } else {
-                printf("?");
-        }
+        printValue(input);
 
         return input;
 }

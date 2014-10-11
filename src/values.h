@@ -3,6 +3,7 @@
 struct Allocator;
 
 #include <stddef.h>
+#include <stdint.h>
 
 enum TypeTags {
         TTAG_NULL,
@@ -11,7 +12,7 @@ enum TypeTags {
 
 struct Value
 {
-        int type_tag;
+        uint32_t type_tag;
         size_t element_size;
         void const *address;
         struct Allocator *allocator;
