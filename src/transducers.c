@@ -40,13 +40,15 @@ struct Reducer* transducer_apply(struct Transducer* transducer, struct Reducer c
 
 struct FilteringTransducer {
         struct Transducer super;
-        bool (*predicate)(struct Value value);
+        bool (*predicate)(struct Value value, void* data);
+        void* predicateData;
 };
 
 struct FilteringReducer {
         struct Reducer super;
         struct Reducer const* step;
-        bool (*predicate)(struct Value value);
+        bool (*predicate)(struct Value value, void* data);
+        void* predicateData;
 };
 
 static
@@ -58,7 +60,7 @@ struct Value filteringReducerZero(struct Reducer const* reducer, struct Allocato
 static
 struct Value filteringReducerApply(struct Reducer const* reducer, struct Value const input, struct Value const current, struct Allocator* allocator) {
         struct FilteringReducer* self = (struct FilteringReducer*) reducer;
-        if (self->predicate(input)) {
+        if (self->predicate(input, self->predicateData)) {
                 return reducer_apply(self->step, input, current, allocator);
         }
 
@@ -71,6 +73,7 @@ static struct Reducer* filteringTransducerApply(struct Transducer *transducer, s
 
         result->step = step;
         result->predicate = self->predicate;
+        result->predicateData = self->predicateData;
         result->super = (struct Reducer) {
                 .zero = filteringReducerZero,
                 .apply = filteringReducerApply,
@@ -79,12 +82,15 @@ static struct Reducer* filteringTransducerApply(struct Transducer *transducer, s
         return &result->super;
 }
 
-struct Transducer* filteringTransducer(bool (*predicate)(struct Value value), struct Allocator* allocator) {
+struct Transducer* filteringTransducer(bool (*predicate)(struct Value value, void* data), void* predicateData, struct Allocator* allocator) {
         struct FilteringTransducer* transducer = allocator_alloc(allocator, sizeof *transducer);
 
-        transducer->predicate = predicate;
-        transducer->super = (struct Transducer) {
-                .apply = filteringTransducerApply,
+        *transducer = (struct FilteringTransducer) {
+                .predicate = predicate,
+                .predicateData = predicateData,
+                .super = (struct Transducer) {
+                        .apply = filteringTransducerApply,
+                }
         };
 
         return &transducer->super;

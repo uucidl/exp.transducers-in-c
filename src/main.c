@@ -145,7 +145,8 @@ static struct Reducer* printReducer(struct Allocator* allocator) {
         return result;
 }
 
-static bool positiveFloatsOnly(struct Value value) {
+static bool positiveFloatsOnly(struct Value value, void* data) {
+        (void) data;
         return value.type_tag == TTAG_FLOAT && *((float*) value.address) > 0.0f;
 }
 
@@ -201,7 +202,7 @@ int main (int argc, char** argv)
                 float values[] = { -1.0f, 1.0f, -2.0f, 2.0f, 3.0f, -3.0f, 4.0f, -4.0f };
                 struct ValueStreamRange valuesRange;
                 struct Transducer* processSteps[] = {
-                        filteringTransducer(positiveFloatsOnly, &heapAllocator),
+                        filteringTransducer(positiveFloatsOnly, NULL, &heapAllocator),
                         mappingTransducer(&accumulator, &heapAllocator),
                 };
                 struct Transducer* process = composingTransducer(
