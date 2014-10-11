@@ -12,5 +12,5 @@ struct ValueStreamRange
         uint8_t const *end;
         uint8_t const *cursor;
         enum StreamErrorCode error;
-        enum StreamErrorCode (*next)(struct ValueStreamRange*);
+        enum StreamErrorCode (*next)(struct ValueStreamRange *);
 };
