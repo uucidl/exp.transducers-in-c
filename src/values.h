@@ -22,4 +22,4 @@ static inline struct Value nullValue()
         return (struct Value) { .type_tag = TTAG_NULL };
 }
 
-extern void freeValue(struct Value *value);
+void freeValue(struct Value *value);
