@@ -7,6 +7,8 @@ Transducers have been introduced by Rich Hickey in his Strange Loop talk in 2014
 
 see https://www.youtube.com/watch?v=6mTbuzafcII
 
+[Read here about the implementation](./src/README.md)
+
 Status
 ------
 
