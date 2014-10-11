@@ -25,6 +25,11 @@ static struct Value floatValue(float const f, struct Allocator * const allocator
         };
 }
 
+static float justFloat(struct Value value) {
+        assert(value.type_tag == TTAG_FLOAT);
+        return *((float*) value.address);
+}
+
 static struct Value transduceFloatArray(float* values, size_t valuesCount, struct Transducer* transducer, struct Allocator* allocator) {
         struct Reducer* reducer = transducer_apply(transducer, idReducer(allocator), allocator);
         struct Value result = reducer_zero(reducer, allocator);
@@ -165,13 +170,18 @@ int main (int argc, char** argv)
                 .free = stdlib_free,
         };
 
+        static struct Reducer accumulator = {
+                .zero = accumulateFloatZero,
+                .apply = accumulateFloatApply,
+        };
+
         printf("1. individual test\n");
         {
                 struct Value a = floatValue(1.0f, &heapAllocator);
                 struct Value b = floatValue(3.0f, &heapAllocator);
                 struct Value result = accumulateFloat(a, b, &heapAllocator);
 
-                printf("result is: %f; expected: 4.0\n", *((float*)result.address));
+                printf("result is: %f; expected: 4.0\n", justFloat(result));
 
                 freeValue(&a), freeValue(&b), freeValue(&result);
         }
@@ -180,24 +190,16 @@ int main (int argc, char** argv)
         {
                 float values[] = { 1.0, 2.0, 3.0, 4.0 };
                 struct ValueStreamRange valuesRange;
-                struct Reducer accumulator = {
-                        .zero = accumulateFloatZero,
-                        .apply = accumulateFloatApply,
-                };
                 floatArrayVSR(&valuesRange, values, sizeof values / sizeof values[0]);
 
                 struct Value result = reduceStream(&valuesRange, &accumulator, &heapAllocator);
-                printf("result is: %f; expected: 10.0\n", *((float*) result.address));
+                printf("result is: %f; expected: 10.0\n", justFloat(result));
         }
 
         printf("3. filter out all negative floats and accumulate\n");
         {
                 float values[] = { -1.0f, 1.0f, -2.0f, 2.0f, 3.0f, -3.0f, 4.0f, -4.0f };
                 struct ValueStreamRange valuesRange;
-                struct Reducer accumulator = {
-                        .zero = accumulateFloatZero,
-                        .apply = accumulateFloatApply,
-                };
                 struct Transducer* processSteps[] = {
                         filteringTransducer(positiveFloatsOnly, &heapAllocator),
                         mappingTransducer(&accumulator, &heapAllocator),
@@ -224,18 +226,12 @@ int main (int argc, char** argv)
                         printf("\n");
                 }
 
-                float resultFloat = -1.0000;
-                if (result.type_tag == TTAG_FLOAT) {
-                        resultFloat = *((float*) result.address);
-                }
-                printf("result is: %f ; expected: 10.0\n", resultFloat);
+                printf("result is: %f ; expected: 10.0\n", justFloat(result));
 
                 printf("transduce it again with transduceFloatArray\n");
                 {
                         struct Value result = transduceFloatArray(values, sizeof values / sizeof values[0], process, &heapAllocator);
-                        assert(result.type_tag == TTAG_FLOAT);
-                        float resultFloat = *((float*) result.address);
-                        printf("result is: %f ; expected: 10.0\n", resultFloat);
+                        printf("result is: %f ; expected: 10.0\n", justFloat(result));
                 }
         }
 
