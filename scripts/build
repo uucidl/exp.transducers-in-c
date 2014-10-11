@@ -130,8 +130,12 @@ function compile_gxxlike() {
     if [[ "static-analysis" == "${BUILD_STYLE}" ]]; then
         cflags=("${cflags[@]}" "--analyze")
         ldflags=()
-        "${CC}" -std=c11 "${cflags[@]}" "${ldflags[@]}" "${c_src_files[@]}"
-        "${CXX}" -std=c++11 "${cflags[@]}" "${ldflags[@]}" "${src_files[@]}"
+        if [[ -n "${c_src_files[@]}" ]]; then
+            "${CC}" -std=c11 "${cflags[@]}" "${ldflags[@]}" "${c_src_files[@]}"
+        fi
+        if [[ -n "${src_files[@]}" ]]; then
+            "${CXX}" -std=c++11 "${cflags[@]}" "${ldflags[@]}" "${src_files[@]}"
+        fi
         return
     fi
 
