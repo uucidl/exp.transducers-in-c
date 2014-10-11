@@ -1,12 +1,9 @@
-#ifndef UU_ALLOCATOR_TYPE_H
-#define UU_ALLOCATOR_TYPE_H
+#pragma once
 
-#include <string.h>
+#include <stddef.h>
 
 struct Allocator
 {
         void *(*alloc)(struct Allocator *self, size_t size);
         void (*free)(struct Allocator *self, void *ptr);
 };
-
-#endif
