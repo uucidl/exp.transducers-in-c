@@ -271,64 +271,6 @@ static struct Transducer* filteringTransducer(bool (*predicate)(struct Value val
         return &transducer->super;
 }
 
-struct ComposingTransducer
-{
-        struct Transducer super;
-        struct Transducer** transducers;
-        size_t transducersCount;
-};
-
-struct ComposingReducer
-{
-        struct Reducer super;
-        struct Reducer const* topReducer;
-};
-
-static struct Value composingReducerZero(struct Reducer const* reducer, struct Allocator* allocator) {
-        return nullValue();
-}
-
-static struct Value composingReducerApply(struct Reducer const* reducer, struct Value input, struct Value current, struct Allocator* allocator) {
-        struct ComposingReducer* self = (struct ComposingReducer*) reducer;
-
-        return reducer_apply(self->topReducer,
-                             input,
-                             current,
-                             allocator);
-}
-
-static struct Reducer* composingTransducerApply(struct Transducer* transducer, struct Reducer const* step, struct Allocator* allocator) {
-        struct ComposingTransducer* self = (struct ComposingTransducer*) transducer;
-        struct ComposingReducer* result = allocator_alloc(allocator, sizeof *result);
-
-        struct Reducer const * x = step;
-        for (size_t i = 0; i < self->transducersCount; i++) {
-                size_t idx = self->transducersCount - 1 - i;
-                x = transducer_apply(self->transducers[idx], x, allocator);
-        }
-
-        result->topReducer = x;
-        result->super = (struct Reducer) {
-                composingReducerZero,
-                composingReducerApply,
-        };
-
-        return &result->super;
-}
-
-static struct Transducer* composingTransducer(struct Transducer** transducers, size_t transducerCount, struct Allocator* allocator) {
-        struct ComposingTransducer* result = allocator_alloc(allocator, sizeof *result);
-
-        result->super = (struct Transducer) {
-                composingTransducerApply,
-        };
-
-        result->transducers = transducers;
-        result->transducersCount = transducerCount;
-
-        return &result->super;
-}
-
 struct MappingTransducer
 {
         struct Transducer super;
@@ -338,7 +280,7 @@ struct MappingTransducer
 struct MappingReducer
 {
         struct Reducer super;
-        struct Reducer *reducer;
+        struct Reducer const *reducer;
         struct Value reducerResult;
         struct Reducer const* step;
 };
@@ -360,19 +302,27 @@ struct Value mappingReducerApply(struct Reducer const* reducer, struct Value inp
 }
 
 static
-struct Reducer* mappingTransducerApply(struct Transducer* transducer, struct Reducer const* step, struct Allocator* allocator) {
-        struct MappingTransducer* self = (struct MappingTransducer*) transducer;
+struct Reducer* newMappingReducer(struct Reducer const* reducer, struct Reducer const* step, struct Allocator* allocator) {
         struct MappingReducer* result = allocator_alloc(allocator, sizeof *result);
 
-        result->reducer = self->reducer;
-        result->reducerResult = reducer_zero(result->reducer, allocator);
-        result->step = step;
-        result->super = (struct Reducer) {
-                mappingReducerZero,
-                mappingReducerApply,
+        *result = (struct MappingReducer) {
+                (struct Reducer) {
+                        mappingReducerZero,
+                        mappingReducerApply,
+                },
+                reducer,
+                reducer_zero(reducer, allocator),
+                step,
         };
 
         return &result->super;
+}
+
+static
+struct Reducer* mappingTransducerApply(struct Transducer* transducer, struct Reducer const* step, struct Allocator* allocator) {
+        struct MappingTransducer* self = (struct MappingTransducer*) transducer;
+
+        return newMappingReducer(self->reducer, step, allocator);
 }
 
 static
@@ -388,6 +338,38 @@ struct Transducer* mappingTransducer(struct Reducer* reducer, struct Allocator* 
 
         return &result->super;
 }
+
+struct ComposingTransducer
+{
+        struct Transducer super;
+        struct Transducer** transducers;
+        size_t transducersCount;
+};
+
+static struct Reducer* composingTransducerApply(struct Transducer* transducer, struct Reducer const* step, struct Allocator* allocator) {
+        struct ComposingTransducer* self = (struct ComposingTransducer*) transducer;
+        struct Reducer * x = (struct Reducer*) step;
+        for (size_t i = 0; i < self->transducersCount; i++) {
+                size_t idx = self->transducersCount - 1 - i;
+                x = transducer_apply(self->transducers[idx], x, allocator);
+        }
+
+        return x;
+}
+
+static struct Transducer* composingTransducer(struct Transducer** transducers, size_t transducerCount, struct Allocator* allocator) {
+        struct ComposingTransducer* result = allocator_alloc(allocator, sizeof *result);
+
+        result->super = (struct Transducer) {
+                composingTransducerApply,
+        };
+
+        result->transducers = transducers;
+        result->transducersCount = transducerCount;
+
+        return &result->super;
+}
+
 
 static
 struct Value printReducerZero(struct Reducer const* reducer, struct Allocator* allocator)
