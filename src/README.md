@@ -16,3 +16,8 @@ The transducer approach also relies on a type signature with
 polymorphic types at either end: `input= -fn-> output`
 
 This, again is not quite sympathetic to the C model.
+
+Closures also need some bookeeping and memory allocation. This is easy
+to track using a garbage collector. Without, we have to deal with some
+notion of process boundaries/ownership. This implementation does not
+yet deal with this.
