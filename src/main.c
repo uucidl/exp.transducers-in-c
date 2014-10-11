@@ -150,7 +150,7 @@ struct Value nextValueVSR(struct ValueStreamRange* range)
 }
 
 static
-struct Value reduce(struct ValueStreamRange* range, struct Reducer* reducer, struct Allocator * allocator)
+struct Value reduceStream(struct ValueStreamRange* range, struct Reducer* reducer, struct Allocator * allocator)
 {
         struct Value element;
         struct Value result = reducer->zero(reducer);
@@ -301,7 +301,7 @@ int main (int argc, char** argv)
                 };
                 floatArrayVSR(&valuesRange, values, sizeof values / sizeof values[0]);
 
-                struct Value result = reduce(&valuesRange, &accumulator, &heapAllocator);
+                struct Value result = reduceStream(&valuesRange, &accumulator, &heapAllocator);
                 printf("result is: %f; expected: 10.0\n", *((float*) result.address));
         }
 
@@ -313,7 +313,7 @@ int main (int argc, char** argv)
                 printf("input: ");
                 {
                         floatArrayVSR(&valuesRange, values, sizeof values / sizeof values[0]);
-                        reduce(&valuesRange, printReducer(&heapAllocator), &heapAllocator);
+                        reduceStream(&valuesRange, printReducer(&heapAllocator), &heapAllocator);
                 }
 
                 printf("\nprint-out: ");
@@ -322,7 +322,7 @@ int main (int argc, char** argv)
                         struct Reducer* reducer = transducer_apply(one, printReducer(&heapAllocator), &heapAllocator);
 
                         floatArrayVSR(&valuesRange, values, sizeof values / sizeof values[0]);
-                        result = reduce(&valuesRange, reducer, &heapAllocator);
+                        result = reduceStream(&valuesRange, reducer, &heapAllocator);
                         printf("\n");
                 }
 
