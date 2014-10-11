@@ -22,7 +22,7 @@ struct Value
 };
 
 static struct Value nullValue() {
-        return (struct Value) { 0, 0, 0, 0 };
+        return (struct Value) { .type_tag = TTAG_NULL };
 }
 
 static void freeValue(struct Value* value)
