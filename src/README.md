@@ -13,7 +13,7 @@ however we're convinced this would not fly in any random transducer
 combination.
 
 The transducer approach also relies on a type signature with
-polymorphic types at either end: `input= -fn-> output`
+polymorphic types at either end: `input -fn-> output`
 
 This, again is not quite sympathetic to the C model.
 
