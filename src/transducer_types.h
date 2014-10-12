@@ -5,8 +5,8 @@ struct Allocator;
 // reducer closure
 struct Reducer
 {
-        struct Value (*zero)(struct Reducer const *reducer,
-                             struct Allocator *allocator);
+        struct Value (*identity)(struct Reducer const *reducer,
+                                 struct Allocator *allocator);
 
         struct Value (*apply)(struct Reducer const *reducer, struct Value input,
                               struct Value current,

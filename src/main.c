@@ -62,7 +62,7 @@ static struct Value justValueOfIndexedValue(struct Value indexedValue) {
 
 static struct Value transduceFloatArray(float* values, size_t valuesCount, struct Transducer* transducer, struct Allocator* allocator) {
         struct Reducer* reducer = transducer_apply(transducer, idReducer(allocator), allocator);
-        struct Value result = reducer_zero(reducer, allocator);
+        struct Value result = reducer_identity(reducer, allocator);
         for (size_t i = 0; i < valuesCount; i++) {
                 struct Value value = { TTAG_FLOAT, sizeof values[i], &values[i], 0 };
                 result = reducer_apply(reducer, value, result, allocator);
@@ -98,7 +98,7 @@ static
 struct Value reduceStream(struct ValueStreamRange* range, struct Reducer* reducer, struct Allocator * allocator)
 {
         struct Value element;
-        struct Value result = reducer_zero(reducer, allocator);
+        struct Value result = reducer_identity(reducer, allocator);
         while ((element = nextValueVSR(range), range->error == S_NoError)) {
                 result = reducer_apply(reducer, element, result, allocator);
         }
@@ -124,7 +124,7 @@ struct Value accumulateFloat(
 }
 
 static
-struct Value accumulateFloatZero(struct Reducer const* reducer, struct Allocator* allocator)
+struct Value accumulateFloatIdentity(struct Reducer const* reducer, struct Allocator* allocator)
 {
         static float zero = 0.0f;
         return (struct Value) {
@@ -144,7 +144,7 @@ struct Value accumulateFloatApply(struct Reducer const* reducer,
 }
 
 static
-struct Value printReducerZero(struct Reducer const* reducer, struct Allocator* allocator)
+struct Value printReducerIdentity(struct Reducer const* reducer, struct Allocator* allocator)
 {
         return nullValue();
 }
@@ -177,7 +177,7 @@ static struct Reducer* printReducer(struct Allocator* allocator) {
                 allocator_alloc(allocator, sizeof *result);
 
         *result = (struct Reducer) {
-                .zero = printReducerZero,
+                .identity = printReducerIdentity,
                 .apply = printReducerApply,
         };
 
@@ -189,7 +189,7 @@ static bool positiveFloatsOnly(struct Value value, void* data) {
         return value.type_tag == TTAG_FLOAT && *((float*) value.address) > 0.0f;
 }
 
-struct Value indexingReducerZero(struct Reducer const *reducer, struct Allocator *allocator) {
+struct Value indexingReducerIdentity(struct Reducer const *reducer, struct Allocator *allocator) {
         return nullValue();
 }
 
@@ -209,7 +209,7 @@ struct Reducer* indexingReducer(struct Allocator* allocator) {
         struct Reducer* result = allocator_alloc(allocator, sizeof *result);
 
         *result = (struct Reducer) {
-                indexingReducerZero,
+                indexingReducerIdentity,
                 indexingReducerApply,
         };
 
@@ -252,7 +252,7 @@ int main (int argc, char** argv)
         };
 
         static struct Reducer accumulator = {
-                .zero = accumulateFloatZero,
+                .identity = accumulateFloatIdentity,
                 .apply = accumulateFloatApply,
         };
 

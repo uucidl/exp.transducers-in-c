@@ -3,9 +3,9 @@
 
 #include "allocator.h"
 
-struct Value reducer_zero(struct Reducer const* reducer, struct Allocator* allocator)
+struct Value reducer_identity(struct Reducer const* reducer, struct Allocator* allocator)
 {
-        return reducer->zero(reducer, allocator);
+        return reducer->identity(reducer, allocator);
 }
 
 struct Value reducer_apply(struct Reducer const* reducer, struct Value input, struct Value current, struct Allocator* allocator) {
@@ -13,7 +13,7 @@ struct Value reducer_apply(struct Reducer const* reducer, struct Value input, st
 }
 
 static
-struct Value idReducerZero(struct Reducer const* reducer, struct Allocator* allocator) {
+struct Value idReducerIdentity(struct Reducer const* reducer, struct Allocator* allocator) {
         return nullValue();
 }
 
@@ -26,7 +26,7 @@ struct Reducer* idReducer(struct Allocator* allocator) {
         struct Reducer* result = allocator_alloc(allocator, sizeof *result);
 
         *result = (struct Reducer) {
-                idReducerZero,
+                idReducerIdentity,
                 idReducerApply,
         };
 
@@ -52,7 +52,7 @@ struct FilteringReducer {
 };
 
 static
-struct Value filteringReducerZero(struct Reducer const* reducer, struct Allocator* allocator)
+struct Value filteringReducerIdentity(struct Reducer const* reducer, struct Allocator* allocator)
 {
         return nullValue();
 }
@@ -75,7 +75,7 @@ static struct Reducer* filteringTransducerApply(struct Transducer *transducer, s
         result->predicate = self->predicate;
         result->predicateData = self->predicateData;
         result->super = (struct Reducer) {
-                .zero = filteringReducerZero,
+                .identity = filteringReducerIdentity,
                 .apply = filteringReducerApply,
         };
 
@@ -111,10 +111,10 @@ struct MappingReducer
 };
 
 static
-struct Value mappingReducerZero(struct Reducer const* reducer, struct Allocator* allocator)
+struct Value mappingReducerIdentity(struct Reducer const* reducer, struct Allocator* allocator)
 {
         struct MappingReducer* self = (struct MappingReducer*) reducer;
-        return reducer_zero(self->step, allocator);
+        return reducer_identity(self->step, allocator);
 }
 
 static
@@ -132,11 +132,11 @@ struct Reducer* newMappingReducer(struct Reducer const* reducer, struct Reducer 
 
         *result = (struct MappingReducer) {
                 (struct Reducer) {
-                        mappingReducerZero,
+                        mappingReducerIdentity,
                         mappingReducerApply,
                 },
                 reducer,
-                reducer_zero(reducer, allocator),
+                reducer_identity(reducer, allocator),
                 step,
         };
 

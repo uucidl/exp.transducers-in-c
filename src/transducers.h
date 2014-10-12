@@ -8,8 +8,8 @@ struct Transducer;
 
 #include <stdbool.h>
 
-struct Value reducer_zero(struct Reducer const *reducer,
-                          struct Allocator *allocator);
+struct Value reducer_identity(struct Reducer const *reducer,
+                              struct Allocator *allocator);
 
 struct Value reducer_apply(struct Reducer const *reducer, struct Value input,
                            struct Value current, struct Allocator *allocator);
