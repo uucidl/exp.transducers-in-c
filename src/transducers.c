@@ -163,6 +163,57 @@ struct Transducer* mappingTransducer(struct Reducer* reducer, struct Allocator* 
         return &result->super;
 }
 
+struct MappingFnInput
+{
+        struct Value (*mapperFn)(struct Value, void* data);
+        void* mapperData;
+};
+
+struct MappingFnReducer
+{
+        struct ChainedReducer super;
+        struct MappingFnInput input;
+};
+
+struct MappingFnTransducer
+{
+        struct Transducer super;
+        struct MappingFnInput input;
+};
+
+static
+struct Value mappingFnReducerApply(struct Reducer const* reducer, struct Value input, struct Value current, struct Allocator* allocator) {
+        struct MappingFnReducer* self = (struct MappingFnReducer*) reducer;
+
+        return reducer_apply(self->super.step, self->input.mapperFn(input, self->input.mapperData), current, allocator);
+}
+
+static
+struct Reducer* mappingFnTransducerApply(struct Transducer* transducer, struct Reducer const* step, struct Allocator* allocator) {
+        struct MappingFnTransducer* self = (struct MappingFnTransducer*) transducer;
+
+        struct MappingFnReducer* result = allocator_alloc(allocator, sizeof *result);
+        result->super = chainedReducerMake(step, mappingFnReducerApply);
+        result->input = self->input;
+
+        return &result->super.super;
+}
+
+struct Transducer* mappingFnTransducer(struct Value (*mapperFn)(struct Value, void* data), void* mapperData, struct Allocator* allocator) {
+        struct MappingFnTransducer* result = allocator_alloc(allocator, sizeof *result);
+
+        result->super = (struct Transducer) {
+                mappingFnTransducerApply,
+        };
+
+        result->input = (struct MappingFnInput) {
+                .mapperFn = mapperFn,
+                .mapperData = mapperData,
+        };
+
+        return &result->super;
+}
+
 struct ComposingTransducer
 {
         struct Transducer super;

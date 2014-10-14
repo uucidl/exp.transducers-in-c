@@ -230,6 +230,12 @@ static bool isIndexInRange(struct Value value, void* userData) {
         return index >= range->start && index < range->end;
 }
 
+struct Value invertFloat(struct Value value, void *userData)
+{
+        struct Allocator* allocator = userData;
+        return floatValue(-justFloat(value), allocator);
+}
+
 /* main program */
 
 static
@@ -323,6 +329,7 @@ int main (int argc, char** argv)
                         .end = 4,
                 };
                 struct Transducer* processSteps[] = {
+                        mappingFnTransducer(invertFloat, &heapAllocator, &heapAllocator),
                         filteringTransducer(positiveFloatsOnly, NULL, &heapAllocator),
                         mappingTransducer(indexingReducer(&heapAllocator), &heapAllocator),
                         filteringTransducer(isIndexInRange, &range, &heapAllocator),
@@ -335,7 +342,7 @@ int main (int argc, char** argv)
                         sizeof processSteps / sizeof processSteps[0],
                         &heapAllocator);
 
-                float values[] = { -3.0, -5.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 };
+                float values[] = { -3.0, -5.0, 1.0, 2.0, 3.0, 4.0, -5.0, -6.0, -7.0 };
                 {
                         struct Value result = transduceFloatArray(values, sizeof values / sizeof values[0], process, &heapAllocator);
                         printf("\n");
