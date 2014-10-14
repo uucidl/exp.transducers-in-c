@@ -38,6 +38,29 @@ struct Reducer* transducer_apply(struct Transducer* transducer, struct Reducer c
         return transducer->apply(transducer, step, allocator);
 }
 
+struct ChainedReducer {
+        struct Reducer super;
+        struct Reducer const* step;
+};
+
+static struct Value chainedReducerIdentity(struct Reducer const *reducer, struct Allocator* allocator)
+{
+        struct ChainedReducer *self = (struct ChainedReducer*) reducer;
+        return reducer_identity(self->step, allocator);
+}
+
+static struct ChainedReducer chainedReducerMake(struct Reducer const *step, struct Value (*reducingFn)(struct Reducer const*, struct Value, struct Value, struct Allocator*)) {
+        struct ChainedReducer result = {
+                .super = (struct Reducer) {
+                        .identity = chainedReducerIdentity,
+                        .apply = reducingFn,
+                },
+                .step = step
+        };
+
+        return result;
+}
+
 struct FilteringTransducer {
         struct Transducer super;
         bool (*predicate)(struct Value value, void* data);
@@ -45,23 +68,16 @@ struct FilteringTransducer {
 };
 
 struct FilteringReducer {
-        struct Reducer super;
-        struct Reducer const* step;
+        struct ChainedReducer super;
         bool (*predicate)(struct Value value, void* data);
         void* predicateData;
 };
 
 static
-struct Value filteringReducerIdentity(struct Reducer const* reducer, struct Allocator* allocator)
-{
-        return nullValue();
-}
-
-static
 struct Value filteringReducerApply(struct Reducer const* reducer, struct Value const input, struct Value const current, struct Allocator* allocator) {
         struct FilteringReducer* self = (struct FilteringReducer*) reducer;
         if (self->predicate(input, self->predicateData)) {
-                return reducer_apply(self->step, input, current, allocator);
+                return reducer_apply(self->super.step, input, current, allocator);
         }
 
         return current;
@@ -71,15 +87,11 @@ static struct Reducer* filteringTransducerApply(struct Transducer *transducer, s
         struct FilteringTransducer* self = (struct FilteringTransducer*) transducer;
         struct FilteringReducer* result = allocator_alloc(allocator, sizeof *result);
 
-        result->step = step;
         result->predicate = self->predicate;
         result->predicateData = self->predicateData;
-        result->super = (struct Reducer) {
-                .identity = filteringReducerIdentity,
-                .apply = filteringReducerApply,
-        };
+        result->super = chainedReducerMake(step, filteringReducerApply);
 
-        return &result->super;
+        return &result->super.super;
 }
 
 struct Transducer* filteringTransducer(bool (*predicate)(struct Value value, void* data), void* predicateData, struct Allocator* allocator) {
@@ -104,18 +116,10 @@ struct MappingTransducer
 
 struct MappingReducer
 {
-        struct Reducer super;
+        struct ChainedReducer super;
         struct Reducer const *reducer;
         struct Value reducerResult;
-        struct Reducer const* step;
 };
-
-static
-struct Value mappingReducerIdentity(struct Reducer const* reducer, struct Allocator* allocator)
-{
-        struct MappingReducer* self = (struct MappingReducer*) reducer;
-        return reducer_identity(self->step, allocator);
-}
 
 static
 struct Value mappingReducerApply(struct Reducer const* reducer, struct Value input, struct Value current, struct Allocator* allocator) {
@@ -123,7 +127,7 @@ struct Value mappingReducerApply(struct Reducer const* reducer, struct Value inp
 
         self->reducerResult = reducer_apply(self->reducer, input, self->reducerResult, allocator);
 
-        return reducer_apply(self->step, self->reducerResult, current, allocator);
+        return reducer_apply(self->super.step, self->reducerResult, current, allocator);
 }
 
 static
@@ -131,16 +135,12 @@ struct Reducer* newMappingReducer(struct Reducer const* reducer, struct Reducer 
         struct MappingReducer* result = allocator_alloc(allocator, sizeof *result);
 
         *result = (struct MappingReducer) {
-                (struct Reducer) {
-                        mappingReducerIdentity,
-                        mappingReducerApply,
-                },
+                .super = chainedReducerMake(step, mappingReducerApply),
                 reducer,
                 reducer_identity(reducer, allocator),
-                step,
         };
 
-        return &result->super;
+        return &result->super.super;
 }
 
 static
