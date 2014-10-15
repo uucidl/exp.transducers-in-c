@@ -8,9 +8,15 @@ struct Transducer;
 
 #include <stdbool.h>
 
+/// establishes the initial reducing state
 struct Value reducer_identity(struct Reducer const *reducer,
                               struct Allocator *allocator);
 
+/// produce a final value and/or flush state.
+struct Value reducer_complete(struct Reducer const *reducer,
+                              struct Value result, struct Allocator *allocator);
+
+/// reduction function
 struct Value reducer_apply(struct Reducer const *reducer, struct Value input,
                            struct Value current, struct Allocator *allocator);
 
