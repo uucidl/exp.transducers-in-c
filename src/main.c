@@ -171,6 +171,10 @@ static struct Value printReducerApply(struct Reducer const *reducer,
                                       struct Value input, struct Value current,
                                       struct Allocator *allocator)
 {
+        if (current.type_tag == 0) {
+                printf("[");
+        }
+
         if (current.type_tag != 0) {
                 printf(", ");
         }
@@ -180,12 +184,22 @@ static struct Value printReducerApply(struct Reducer const *reducer,
         return input;
 }
 
+static struct Value printReducerComplete(struct Reducer const *reducer,
+                                         struct Value result,
+                                         struct Allocator *allocator)
+{
+        printf("]\n");
+        return result;
+}
+
 static struct Reducer *printReducer(struct Allocator *allocator)
 {
         struct Reducer *result = allocator_alloc(allocator, sizeof *result);
 
         *result = (struct Reducer){
-            .identity = printReducerIdentity, .apply = printReducerApply,
+            .identity = printReducerIdentity,
+            .apply = printReducerApply,
+            .complete = printReducerComplete,
         };
 
         return result;
@@ -316,7 +330,7 @@ int main(int argc, char **argv)
                                      &heapAllocator);
                 }
 
-                printf("\nprint-out: ");
+                printf("print-out: ");
                 struct Value result;
                 {
                         struct Reducer *reducer = transducer_apply(
@@ -327,7 +341,6 @@ int main(int argc, char **argv)
                                       sizeof values / sizeof values[0]);
                         result =
                             reduceStream(&valuesRange, reducer, &heapAllocator);
-                        printf("\n");
                 }
 
                 printf("result is: %f ; expected: 10.0\n", justFloat(result));
@@ -371,7 +384,6 @@ int main(int argc, char **argv)
                         struct Value result = transduceFloatArray(
                             values, sizeof values / sizeof values[0], process,
                             &heapAllocator);
-                        printf("\n");
                         if (result.type_tag == TTAG_FLOAT) {
                                 printf("result is: %f ; expected 19.0\n",
                                        justFloat(result));
