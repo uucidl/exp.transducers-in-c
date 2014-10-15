@@ -27,12 +27,10 @@ filteringTransducer(bool (*predicate)(struct Value value, void *data),
 struct Transducer *mappingTransducer(struct Reducer *reducer,
                                      struct Allocator *allocator);
 
-struct Transducer *
-fnMappingTransducer(struct Value (*mapper)(struct Value value, void *data),
-                    void *mapperData, struct Allocator *allocator);
-
 struct Transducer *composingTransducer(struct Transducer **transducers,
                                        size_t transducerCount,
                                        struct Allocator *allocator);
 
-struct Transducer* mappingFnTransducer(struct Value (*mapperFn)(struct Value, void* data), void* mapperData, struct Allocator* allocator);
+struct Transducer *
+mappingFnTransducer(struct Value (*mapperFn)(struct Value, void *data),
+                    void *mapperData, struct Allocator *allocator);

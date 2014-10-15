@@ -205,6 +205,12 @@ struct Value indexingReducerApply(struct Reducer const *reducer, struct Value in
         return indexValue(input, index, allocator);
 }
 
+static struct Value unwrapIndexedValue(struct Value value, void* data)
+{
+  return justValueOfIndexedValue(value);
+}
+
+
 struct Reducer* indexingReducer(struct Allocator* allocator) {
         struct Reducer* result = allocator_alloc(allocator, sizeof *result);
 
@@ -334,8 +340,8 @@ int main (int argc, char** argv)
                         mappingTransducer(indexingReducer(&heapAllocator), &heapAllocator),
                         filteringTransducer(isIndexInRange, &range, &heapAllocator),
                         mappingTransducer(printReducer(&heapAllocator), &heapAllocator),
-//                        fnMappingTransducer(unwrapIndexedValue, NULL, &heapAllocator),
-//                        mappingTransducer(&accumulator, &heapAllocator),
+                        mappingFnTransducer(unwrapIndexedValue, NULL, &heapAllocator),
+                        mappingTransducer(&accumulator, &heapAllocator),
                 };
                 struct Transducer* process = composingTransducer(
                         processSteps,
@@ -347,7 +353,7 @@ int main (int argc, char** argv)
                         struct Value result = transduceFloatArray(values, sizeof values / sizeof values[0], process, &heapAllocator);
                         printf("\n");
                         if (result.type_tag == TTAG_FLOAT) {
-                                printf("result is: %f ; expected 10.0\n", justFloat(result));
+                                printf("result is: %f ; expected 19.0\n", justFloat(result));
                         }
                 }
         }
