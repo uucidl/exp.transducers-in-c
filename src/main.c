@@ -147,12 +147,6 @@ static struct Value accumulateFloatApply(struct Reducer const *reducer,
         return accumulateFloat(input, current, allocator);
 }
 
-static struct Value printReducerIdentity(struct Reducer const *reducer,
-                                         struct Allocator *allocator)
-{
-        return nullValue();
-}
-
 static void printValue(struct Value value)
 {
         if (value.type_tag == TTAG_FLOAT) {
@@ -197,9 +191,7 @@ static struct Reducer *printReducer(struct Allocator *allocator)
         struct Reducer *result = allocator_alloc(allocator, sizeof *result);
 
         *result = (struct Reducer){
-            .identity = printReducerIdentity,
-            .apply = printReducerApply,
-            .complete = printReducerComplete,
+            .apply = printReducerApply, .complete = printReducerComplete,
         };
 
         return result;
@@ -240,6 +232,49 @@ struct Reducer *indexingReducer(struct Allocator *allocator)
         };
 
         return result;
+}
+
+struct CountingReducer
+{
+        struct Reducer super;
+        size_t count;
+};
+
+static struct Value countingReducerApply(struct Reducer const *reducer,
+                                         struct Value input,
+                                         struct Value current,
+                                         struct Allocator *allocator)
+{
+        struct CountingReducer *self = (struct CountingReducer *)reducer;
+
+        self->count++;
+
+        return input;
+}
+
+static struct Value countingReducerComplete(struct Reducer const *reducer,
+                                            struct Value result,
+                                            struct Allocator *allocator)
+{
+        struct CountingReducer *self = (struct CountingReducer *)reducer;
+
+        printf("{counted: %zu}", self->count);
+
+        return result;
+}
+
+struct Reducer *countingReducer(struct Allocator *allocator)
+{
+        struct CountingReducer *result =
+            allocator_alloc(allocator, sizeof *result);
+
+        *result =
+            (struct CountingReducer){.super = (struct Reducer){
+                                         .apply = countingReducerApply,
+                                         .complete = countingReducerComplete,
+                                     }};
+
+        return &result->super;
 }
 
 struct Range
@@ -361,6 +396,8 @@ int main(int argc, char **argv)
                     .start = 0, .end = 4,
                 };
                 struct Transducer *processSteps[] = {
+                    mappingTransducer(countingReducer(&heapAllocator),
+                                      &heapAllocator),
                     mappingFnTransducer(invertFloat, &heapAllocator,
                                         &heapAllocator),
                     filteringTransducer(positiveFloatsOnly, NULL,
@@ -384,6 +421,8 @@ int main(int argc, char **argv)
                         struct Value result = transduceFloatArray(
                             values, sizeof values / sizeof values[0], process,
                             &heapAllocator);
+
+                        printf("expected: {counted: 4}\n");
                         if (result.type_tag == TTAG_FLOAT) {
                                 printf("result is: %f ; expected 19.0\n",
                                        justFloat(result));
