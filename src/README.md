@@ -21,3 +21,15 @@ Closures also need some bookeeping and memory allocation. This is easy
 to track using a garbage collector. Without, we have to deal with some
 notion of process boundaries/ownership. This implementation does not
 yet deal with this.
+
+# some ideas
+
+An implementation based on stream processors (API defined by
+[streams.h](./streams.h)) would allow for the processing of
+homogeneous arrays and likely feel more idiomatic.
+
+Another approach would use a compiler to generate from transducer
+expressions and C headers the appropriate C code:
+
+=transducer expression + C header -> C function=
+
