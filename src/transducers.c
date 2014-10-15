@@ -73,9 +73,7 @@ static struct Value chainedReducerComplete(struct Reducer const *reducer,
                                            struct Allocator *allocator)
 {
         struct ChainedReducer *self = (struct ChainedReducer *)reducer;
-        return reducer_complete(self->step,
-                                result,
-                                allocator);
+        return reducer_complete(self->step, result, allocator);
 }
 
 static struct ChainedReducer chainedReducerMake(
@@ -167,6 +165,16 @@ struct MappingReducer
         struct Value reducerResult;
 };
 
+static struct Value mappingReducerComplete(struct Reducer const *reducer,
+                                           struct Value result,
+                                           struct Allocator *allocator)
+{
+        struct MappingReducer *self = (struct MappingReducer *)reducer;
+        return reducer_complete(
+            self->super.step,
+            reducer_complete(self->reducer, result, allocator), allocator);
+}
+
 static struct Value mappingReducerApply(struct Reducer const *reducer,
                                         struct Value input,
                                         struct Value current,
@@ -193,6 +201,8 @@ static struct Reducer *newMappingReducer(struct Reducer const *reducer,
             reducer,
             reducer_identity(reducer, allocator),
         };
+
+        result->super.super.complete = mappingReducerComplete;
 
         return &result->super.super;
 }
