@@ -20,7 +20,7 @@ struct Value
 
 static inline struct Value nullValue()
 {
-        return (struct Value) { .type_tag = TTAG_NULL };
+        return (struct Value){.type_tag = TTAG_NULL};
 }
 
 void freeValue(struct Value *value);
