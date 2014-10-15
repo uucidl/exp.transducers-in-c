@@ -68,16 +68,27 @@ static struct Value chainedReducerIdentity(struct Reducer const *reducer,
         return reducer_identity(self->step, allocator);
 }
 
+static struct Value chainedReducerComplete(struct Reducer const *reducer,
+                                           struct Value result,
+                                           struct Allocator *allocator)
+{
+        struct ChainedReducer *self = (struct ChainedReducer *)reducer;
+        return reducer_complete(self->step,
+                                result,
+                                allocator);
+}
+
 static struct ChainedReducer chainedReducerMake(
     struct Reducer const *step,
     struct Value (*reducingFn)(struct Reducer const *, struct Value,
                                struct Value, struct Allocator *))
 {
-        struct ChainedReducer result = {
-            .super = (struct Reducer){
-                .identity = chainedReducerIdentity, .apply = reducingFn,
-            },
-            .step = step};
+        struct ChainedReducer result = {.super = (struct Reducer){
+                                            .identity = chainedReducerIdentity,
+                                            .complete = chainedReducerComplete,
+                                            .apply = reducingFn,
+                                        },
+                                        .step = step};
 
         return result;
 }
