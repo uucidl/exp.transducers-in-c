@@ -76,7 +76,7 @@ static struct Value transduceFloatArray(float *values, size_t valuesCount,
                 result = reducer_apply(reducer, value, result, allocator);
         }
 
-        return result;
+        return reducer_complete(reducer, result, allocator);
 }
 
 /* 2. streams of values */
@@ -110,7 +110,7 @@ static struct Value reduceStream(struct ValueStreamRange *range,
         while ((element = nextValueVSR(range), range->error == S_NoError)) {
                 result = reducer_apply(reducer, element, result, allocator);
         }
-        return result;
+        return reducer_complete(reducer, result, allocator);
 }
 
 /* 3. reducers */
@@ -197,15 +197,10 @@ static bool positiveFloatsOnly(struct Value value, void *data)
         return value.type_tag == TTAG_FLOAT && *((float *)value.address) > 0.0f;
 }
 
-struct Value indexingReducerIdentity(struct Reducer const *reducer,
-                                     struct Allocator *allocator)
-{
-        return nullValue();
-}
-
-struct Value indexingReducerApply(struct Reducer const *reducer,
-                                  struct Value input, struct Value current,
-                                  struct Allocator *allocator)
+static struct Value indexingReducerApply(struct Reducer const *reducer,
+                                         struct Value input,
+                                         struct Value current,
+                                         struct Allocator *allocator)
 {
         size_t index;
         if (current.type_tag == 0) {
@@ -227,7 +222,7 @@ struct Reducer *indexingReducer(struct Allocator *allocator)
         struct Reducer *result = allocator_alloc(allocator, sizeof *result);
 
         *result = (struct Reducer){
-            indexingReducerIdentity, indexingReducerApply,
+            .apply = indexingReducerApply,
         };
 
         return result;

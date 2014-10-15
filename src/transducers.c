@@ -6,19 +6,27 @@
 struct Value reducer_identity(struct Reducer const *reducer,
                               struct Allocator *allocator)
 {
+        if (!reducer->identity) {
+                return nullValue();
+        }
+
         return reducer->identity(reducer, allocator);
+}
+
+struct Value reducer_complete(struct Reducer const *reducer,
+                              struct Value result, struct Allocator *allocator)
+{
+        if (!reducer->complete) {
+                return result;
+        }
+
+        return reducer->complete(reducer, result, allocator);
 }
 
 struct Value reducer_apply(struct Reducer const *reducer, struct Value input,
                            struct Value current, struct Allocator *allocator)
 {
         return reducer->apply(reducer, input, current, allocator);
-}
-
-static struct Value idReducerIdentity(struct Reducer const *reducer,
-                                      struct Allocator *allocator)
-{
-        return nullValue();
 }
 
 static struct Value idReducerApply(struct Reducer const *reducer,
@@ -33,7 +41,7 @@ struct Reducer *idReducer(struct Allocator *allocator)
         struct Reducer *result = allocator_alloc(allocator, sizeof *result);
 
         *result = (struct Reducer){
-            idReducerIdentity, idReducerApply,
+            .apply = idReducerApply,
         };
 
         return result;

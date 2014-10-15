@@ -8,6 +8,10 @@ struct Reducer
         struct Value (*identity)(struct Reducer const *reducer,
                                  struct Allocator *allocator);
 
+        struct Value (*complete)(struct Reducer const *reducer,
+                                 struct Value result,
+                                 struct Allocator *allocator);
+
         struct Value (*apply)(struct Reducer const *reducer, struct Value input,
                               struct Value current,
                               struct Allocator *allocator);
