@@ -12,7 +12,7 @@ see https://www.youtube.com/watch?v=6mTbuzafcII
 Status
 ------
 
-WIP
+Abandoned. I came out convinced that I would use transducers in Clojure however found them not a very good fit for a non-dynamic language.
 
 see the [ChangeLog](./ChangeLog) file for changes.
 
